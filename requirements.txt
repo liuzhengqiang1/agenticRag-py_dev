@@ -1,0 +1,30 @@
+# ------------------------------
+# Web 框架
+# ------------------------------
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# ------------------------------
+# LangChain 核心 + 扩展
+# ------------------------------
+langchain==1.2.14
+langchain-community>=0.3.30
+langchain-openai>=0.3.10
+langchain-text-splitters>=0.0.1
+langchain-chroma>=0.1.0          # ⭐ Chroma 新版，替代 langchain 内置 Chroma
+
+# ------------------------------
+# DashScope Embeddings
+# ------------------------------
+dashscope>=0.1.0                  # ⭐ 必须安装，支持 DashScopeEmbeddings
+
+# ------------------------------
+# 向量数据库
+# ------------------------------
+chromadb>=0.4.22                  # 最新版，兼容 telemetry 修复
+
+# ------------------------------
+# 工具库
+# ------------------------------
+python-dotenv==1.0.0
+pydantic>=2.7.4,<3.0.0
