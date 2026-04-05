@@ -9,6 +9,7 @@ sse-starlette==1.8.2              # ⭐ 用于 Server-Sent Events 流式响应
 # LangChain 核心 + 扩展
 # ------------------------------
 langchain==1.2.14
+langchain-classic>=0.1.0          # ⭐ 新增包，用于 EnsembleRetriever
 langchain-community>=0.3.30
 langchain-openai>=0.3.10
 langchain-text-splitters>=0.0.1
@@ -29,3 +30,4 @@ chromadb>=0.4.22                  # 最新版，兼容 telemetry 修复
 # ------------------------------
 python-dotenv==1.0.0
 pydantic>=2.7.4,<3.0.0
+rank-bm25==0.2.2                  # ⭐ BM25 关键字检索算法
