@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """RAG 服务模块 - 支持多轮对话记忆、流式输出与混合检索"""
 from dotenv import load_dotenv
+
+from app.services.topk import TopKRetriever
+
 load_dotenv()  # 加载 .env 文件中的环境变量
 
 from typing import AsyncIterator
@@ -140,9 +143,9 @@ class RAGService:
         # ⭐ 第一阶段召回：调大 k 值，尽量多拿候选
         vector_retriever = vector_store.as_retriever(
             search_type="similarity",
-            search_kwargs={"k": 5}  # 从 2 调到 5
+            search_kwargs={"k": 10} # 建议10-20以上，可以适当放大，因为我们有RRF去筛，重排序去筛
         )
-        print("✓ 向量检索器（Chroma）初始化完成，召回数：5")
+        print("✓ 向量检索器（Chroma）初始化完成，召回数：10")
 
         # 4. ⭐ 关键字检索器（BM25）
         # 加载并切片训练文档
@@ -154,16 +157,18 @@ class RAGService:
         else:
             bm25_retriever = BM25Retriever.from_documents(
                 documents,
-                k=5  # 从 2 调到 5，第一阶段多召回
+                k=10  # 建议10-20以上，可以适当放大，因为我们有RRF去筛，重排序去筛
             )
-            print("✓ 关键字检索器（BM25）初始化完成，召回数：5")
+            print("✓ 关键字检索器（BM25）初始化完成，召回数：10")
 
             # 5. ⭐ 混合检索器（EnsembleRetriever）
             # 【架构说明】类比 Java 的策略模式聚合器：
             # - retrievers: List<Retriever> 多个检索策略
             # - weights: 各策略的权重（使用 RRF 算法融合排序）
             # - 0.5 + 0.5 = 向量检索和关键字检索各占 50%
-            # - 其实应该根据RRF算法排序后的结果，再取topk，做一次过滤，这样重排序的文档会更有价值
+            # - 下方有个包装类，根据RRF算法排序后的结果，再取topk，做一次过滤，这样用于重排序的文档会更有价值
+            # - EnsembleRetriever 根据源码，如果我们未指定id_key参数，那么默认使用page_content
+            # 当作key进行分数计算，而key是不会重复，所以会出现去重效果
             base_retriever = EnsembleRetriever(
                 retrievers=[vector_retriever, bm25_retriever],
                 weights=[0.5, 0.5]
@@ -180,7 +185,7 @@ class RAGService:
         # - 假设知识库有 10 万个文档片段
         # - Reranker 是 Cross-Encoder 模型，对每个片段都要做深度语义计算
         # - 如果直接扫全库，耗时可能达到分钟级
-        # - 而先用向量检索 + BM25 快速筛到 10 个候选，再用 Reranker 精排这 10 个，只需要秒级
+        # - 而先用向量检索 + BM25 快速筛到 20 个候选，先用RRF加权融合排序后筛出6个，再用 Reranker 精排这 6 个，只需要秒级
         #
         # 类比 Java：
         # - 第一阶段 = MySQL 的 WHERE + LIMIT（快速筛选）
@@ -194,10 +199,13 @@ class RAGService:
             client=ranker,  # 传入 Ranker 实例
             top_n=3  # 最终只取最精准的前 3 个
         )
-        
+
+        # ⭐ 预过滤器（TopKRetriever） k的值代表RRF加权融合排序后的文档，你要保留几个文档交给重排序
+        pre_filtered_retriever = TopKRetriever(base_retriever, k=6)
+
         final_retriever = ContextualCompressionRetriever(
             base_compressor=compressor,
-            base_retriever=base_retriever
+            base_retriever=pre_filtered_retriever
         )
         print("✓ 重排序器（Flashrank Reranker）初始化完成，精排数：3")
         print("✓ 两阶段检索架构已启用：召回（5+5=10） → 重排（Top-3）")
