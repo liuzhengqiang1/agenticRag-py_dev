@@ -14,6 +14,8 @@ from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_community.retrievers import BM25Retriever  # ⭐ 关键字检索
 from langchain_classic.retrievers import EnsembleRetriever  # ⭐ 混合检索聚合器
 from langchain_text_splitters import RecursiveCharacterTextSplitter  # ⭐ 文本切片
+from langchain_classic.retrievers import ContextualCompressionRetriever  # ⭐ 压缩检索器（用于重排）
+from langchain_community.document_compressors import FlashrankRerank  # ⭐ Flashrank 重排模型
 
 # ============================================================
 # 📦 会话存储（内存版）
@@ -42,22 +44,24 @@ def format_docs(docs):
     """将检索到的文档列表格式化为字符串"""
     if not docs:
         return "未在知识库中找到相关信息"
-    # 过滤掉空文档
+    # 过滤掉空文档    非0非空即为True
     valid_docs = [doc.page_content for doc in docs if doc.page_content and doc.page_content.strip()]
     if not valid_docs:
         return "未在知识库中找到相关信息"
     
-    # ⭐ 打印检索到的上下文，便于观察混合检索效果
-    print("\n" + "="*60)
-    print("🔍 检索到的上下文（Context）：")
-    print("="*60)
+    # ⭐ 打印检索到的上下文，便于观察重排效果
+    print("\n" + "="*80)
+    print("🎯 经过 Reranker 重排后，最终发给大模型的上下文（Top-3）：")
+    print("="*80)
     for i, doc in enumerate(docs, 1):
-        print(f"\n📄 文档片段 {i}:")
-        print(f"内容: {doc.page_content[:200]}...")  # 只打印前200字符
-        # 如果有元数据，也打印出来（可以看到来源）
+        print(f"\n📄 文档片段 {i} (重排后排名):")
+        print(f"内容: {doc.page_content[:300]}...")  # 打印前300字符
+        # 如果有元数据，也打印出来（可以看到来源和重排分数）
         if hasattr(doc, 'metadata') and doc.metadata:
             print(f"元数据: {doc.metadata}")
-    print("="*60 + "\n")
+    print("="*80)
+    print("💡 提示：这些是从召回的 10 个候选中，经过 Flashrank 精排后的最优结果")
+    print("="*80 + "\n")
     
     return "\n\n".join(valid_docs)
 
@@ -133,11 +137,12 @@ class RAGService:
             persist_directory="vector_store",
             embedding_function=embeddings
         )
+        # ⭐ 第一阶段召回：调大 k 值，尽量多拿候选
         vector_retriever = vector_store.as_retriever(
             search_type="similarity",
-            search_kwargs={"k": 2}
+            search_kwargs={"k": 5}  # 从 2 调到 5
         )
-        print("✓ 向量检索器（Chroma）初始化完成")
+        print("✓ 向量检索器（Chroma）初始化完成，召回数：5")
 
         # 4. ⭐ 关键字检索器（BM25）
         # 加载并切片训练文档
@@ -145,26 +150,59 @@ class RAGService:
         if not documents:
             print("⚠️ 警告：未能加载文档，BM25 检索器将不可用")
             # 降级为仅使用向量检索
-            ensemble_retriever = vector_retriever
+            base_retriever = vector_retriever
         else:
             bm25_retriever = BM25Retriever.from_documents(
                 documents,
-                k=2  # 返回 Top-2 结果
+                k=5  # 从 2 调到 5，第一阶段多召回
             )
-            print("✓ 关键字检索器（BM25）初始化完成")
+            print("✓ 关键字检索器（BM25）初始化完成，召回数：5")
 
             # 5. ⭐ 混合检索器（EnsembleRetriever）
             # 【架构说明】类比 Java 的策略模式聚合器：
             # - retrievers: List<Retriever> 多个检索策略
             # - weights: 各策略的权重（使用 RRF 算法融合排序）
             # - 0.5 + 0.5 = 向量检索和关键字检索各占 50%
-            ensemble_retriever = EnsembleRetriever(
+            # - 其实应该根据RRF算法排序后的结果，再取topk，做一次过滤，这样重排序的文档会更有价值
+            base_retriever = EnsembleRetriever(
                 retrievers=[vector_retriever, bm25_retriever],
                 weights=[0.5, 0.5]
             )
             print("✓ 混合检索器（Ensemble）初始化完成，权重：向量 50% + BM25 50%")
 
-        # 6. Prompt 模板（支持历史对话）
+        # 6. ⭐⭐⭐ 重排序器（Reranker）—— 两阶段检索的核心！
+        # 【架构说明】类比 Java 的装饰器模式：
+        # - base_retriever：第一阶段召回（粗筛，快速但不精准）
+        # - compressor：第二阶段精排（细筛，慢但精准）
+        # - ContextualCompressionRetriever：将两者组合
+        #
+        # 为什么不直接用 Reranker 扫全库？
+        # - 假设知识库有 10 万个文档片段
+        # - Reranker 是 Cross-Encoder 模型，对每个片段都要做深度语义计算
+        # - 如果直接扫全库，耗时可能达到分钟级
+        # - 而先用向量检索 + BM25 快速筛到 10 个候选，再用 Reranker 精排这 10 个，只需要秒级
+        #
+        # 类比 Java：
+        # - 第一阶段 = MySQL 的 WHERE + LIMIT（快速筛选）
+        # - 第二阶段 = Java 的 Comparator.comparing()（精细排序）
+        
+        # 先导入并初始化 Flashrank 的 Ranker
+        from flashrank import Ranker
+        ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2")  # 轻量级模型，无需 GPU
+        
+        compressor = FlashrankRerank(
+            client=ranker,  # 传入 Ranker 实例
+            top_n=3  # 最终只取最精准的前 3 个
+        )
+        
+        final_retriever = ContextualCompressionRetriever(
+            base_compressor=compressor,
+            base_retriever=base_retriever
+        )
+        print("✓ 重排序器（Flashrank Reranker）初始化完成，精排数：3")
+        print("✓ 两阶段检索架构已启用：召回（5+5=10） → 重排（Top-3）")
+
+        # 7. Prompt 模板（支持历史对话）
         prompt = ChatPromptTemplate.from_messages([
             ("system",
              "你是一个专业的企业 HR 助手，负责回答员工关于公司培训制度的问题。\n"
@@ -175,10 +213,10 @@ class RAGService:
             ("human", "{input}")
         ])
 
-        # 7. 基础 RAG Chain（⭐ 使用混合检索器）
+        # 8. 基础 RAG Chain（⭐ 使用重排后的检索器）
         base_chain = (
             {
-                "context": lambda x: format_docs(ensemble_retriever.invoke(x["input"])),
+                "context": lambda x: format_docs(final_retriever.invoke(x["input"])),
                 "input": lambda x: x["input"],
                 "chat_history": lambda x: x.get("chat_history", [])
             }
@@ -187,7 +225,7 @@ class RAGService:
             | StrOutputParser()
         )
 
-        # 8. 包装为带历史记录的 Chain
+        # 9. 包装为带历史记录的 Chain
         self._conversational_chain = RunnableWithMessageHistory(
             base_chain,
             get_session_history,
@@ -195,7 +233,7 @@ class RAGService:
             history_messages_key="chat_history"
         )
 
-        print("✓ RAG 组件初始化完成（已启用会话记忆 + 混合检索）！")
+        print("✓ RAG 组件初始化完成（已启用会话记忆 + 两阶段检索）！")
         return self._conversational_chain
     
     @property

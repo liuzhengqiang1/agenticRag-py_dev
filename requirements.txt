@@ -31,3 +31,4 @@ chromadb>=0.4.22                  # 最新版，兼容 telemetry 修复
 python-dotenv==1.0.0
 pydantic>=2.7.4,<3.0.0
 rank-bm25==0.2.2                  # ⭐ BM25 关键字检索算法
+flashrank==0.2.8                  # ⭐ 轻量级重排模型（无需 PyTorch）
