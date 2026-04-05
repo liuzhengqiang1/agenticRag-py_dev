@@ -81,6 +81,12 @@ def build_vector_store():
     print("\n[4/4] 正在向量化并保存到 Chroma 数据库...")
     
     # Chroma：轻量级向量数据库（类比 Java 的 H2 或 SQLite）
+    # 注意：每次重新构建时会清空旧数据
+    vector_store = Chroma(persist_directory="vector_store", embedding_function=embeddings)
+
+    # 清空已有数据（防止重复添加）
+    vector_store.delete_collection()
+
     # persist_directory：持久化目录（类似数据库的 data 目录）
     vector_store = Chroma.from_documents(
         documents=chunks,              # 要向量化的文档切片
