@@ -24,6 +24,7 @@ dashscope>=0.1.0                  # ⭐ 必须安装，支持 DashScopeEmbedding
 # 向量数据库
 # ------------------------------
 chromadb>=0.4.22                  # 最新版，兼容 telemetry 修复
+elasticsearch==8.12.0             # ⭐ Elasticsearch Python 客户端
 
 # ------------------------------
 # 工具库
