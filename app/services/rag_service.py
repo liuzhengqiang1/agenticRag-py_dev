@@ -44,6 +44,7 @@ def get_session_history(session_id: str) -> RedisChatMessageHistory:
     
     参数：
         session_id: 会话 ID，用于区分不同用户的对话历史
+        一般来说：前端自己生成session_id(UUID) + 后端获取的user_id 组合在一起 = 上面所说的session_id
         
     返回：
         RedisChatMessageHistory 实例
@@ -52,7 +53,7 @@ def get_session_history(session_id: str) -> RedisChatMessageHistory:
         session_id=session_id,
         url=redis_config.get_url(),
         key_prefix="chat_history:",  # Redis key 前缀，实际存储为 chat_history:{session_id}
-        ttl=3600  # 会话过期时间（秒），1小时后自动清理，可根据需求调整
+        ttl=3600  # 会话过期时间（秒），1小时后自动清理，可根据需求调整 主要看用户量，使用量，多就调小
     )
 
 
@@ -220,7 +221,7 @@ class RAGService:
         )
 
         # ⭐ 预过滤器（TopKRetriever） k的值代表RRF加权融合排序后的文档，你要保留几个文档交给重排序
-        pre_filtered_retriever = TopKRetriever(base_retriever, k=6)
+        pre_filtered_retriever = TopKRetriever(retriever=base_retriever, k=6)
 
         final_retriever = ContextualCompressionRetriever(
             base_compressor=compressor,

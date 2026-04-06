@@ -1,10 +1,14 @@
 from langchain_core.retrievers import BaseRetriever
+from typing import List
+from langchain_core.documents import Document
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
 
 class TopKRetriever(BaseRetriever):
-    def __init__(self, retriever, k):
-        self.retriever = retriever
-        self.k = k
+    retriever: BaseRetriever
+    k: int
 
-    def _get_relevant_documents(self, query):
-        docs = self.retriever.get_relevant_documents(query)
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun = None
+    ) -> List[Document]:
+        docs = self.retriever.invoke(query)
         return docs[:self.k]
