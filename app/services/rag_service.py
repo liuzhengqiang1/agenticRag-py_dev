@@ -80,7 +80,7 @@ def format_docs(docs):
         if hasattr(doc, 'metadata') and doc.metadata:
             print(f"元数据: {doc.metadata}")
     print("="*80)
-    print("💡 提示：这些是从召回的 10 个候选中，经过 Flashrank 精排后的最优结果")
+    print("💡 提示：这些是从召回的 6 个候选中，经过 Flashrank 精排后的最优结果")
     print("="*80 + "\n")
     
     return "\n\n".join(valid_docs)
@@ -228,7 +228,7 @@ class RAGService:
             base_retriever=pre_filtered_retriever
         )
         print("✓ 重排序器（Flashrank Reranker）初始化完成，精排数：3")
-        print("✓ 两阶段检索架构已启用：召回（5+5=10） → 重排（Top-3）")
+        print("✓ 两阶段检索架构已启用：召回（10+10=20）→ 过滤(Top-6) → 重排（Top-3）")
 
         # 7. Prompt 模板（支持历史对话）
         prompt = ChatPromptTemplate.from_messages([
