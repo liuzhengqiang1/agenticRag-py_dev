@@ -9,7 +9,7 @@ Agentic RAG 状态机：LangGraph 编排所有工具
 1. 查询重写节点：优化用户查询（补全上下文、替换指代词）
 2. Agent 节点：决策调用哪些工具
 3. Tool 节点：执行具体任务
-4. 记忆管理：使用 LangGraph 的 MemorySaver，不依赖外部 Redis
+4. 记忆管理：优先使用 Redis 持久化存储，失败时降级到内存（带 LRU 限制）
 """
 
 from typing import Literal, TypedDict
@@ -18,7 +18,10 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode
+from cachetools import LRUCache
+import redis
 
+from app.core.redis_config import RedisConfig
 from app.services.tools import (
     search_knowledge_base,
     get_current_weather,
@@ -33,6 +36,9 @@ from app.services.llm.query_rewriter import (
 # 全局变量：缓存编译后的状态图
 _compiled_graph = None
 
+# 全局变量：记录是否使用 Redis
+_using_redis = False
+
 
 class AgenticRAGState(MessagesState):
     """
@@ -44,6 +50,57 @@ class AgenticRAGState(MessagesState):
     """
 
     rewritten_query: str = ""
+
+
+def get_checkpointer():
+    """
+    获取检查点存储器（优先 Redis，失败时降级到内存）
+
+    降级策略：
+    1. 尝试连接 Redis，成功则使用 RedisSaver
+    2. 连接失败则降级到 MemorySaver + LRU 缓存（防止 OOM）
+
+    返回:
+        检查点存储器实例
+    """
+    global _using_redis
+
+    try:
+        # 尝试使用 Redis
+        redis_config = RedisConfig(decode_responses=False)  # LangGraph 需要字节模式
+        redis_client = redis.Redis(**redis_config.get_connection_kwargs())
+
+        # 健康检查
+        redis_client.ping()
+
+        # 导入 RedisSaver（延迟导入，避免没有安装时报错）
+        try:
+            from langgraph.checkpoint.redis import RedisSaver
+
+            _using_redis = True
+            print("✓ Redis 连接成功，使用持久化存储")
+            return RedisSaver(redis_client)
+        except ImportError:
+            print("⚠️  langgraph.checkpoint.redis 未安装，降级到内存存储")
+            raise
+
+    except Exception as e:
+        # Redis 连接失败，降级到内存存储
+        print(f"⚠️  Redis 连接失败：{e}")
+        print("⚠️  降级到内存存储（LRU 限制：最多 100 个会话）")
+
+        _using_redis = False
+
+        # 使用 LRU 缓存包装 MemorySaver，防止 OOM
+        class LRUMemorySaver(MemorySaver):
+            """带 LRU 限制的内存存储器"""
+
+            def __init__(self, maxsize=100):
+                super().__init__()
+                # 用 LRU 缓存替换原有的存储字典
+                self.storage = LRUCache(maxsize=maxsize)
+
+        return LRUMemorySaver(maxsize=100)
 
 
 def create_agentic_rag_graph():
@@ -156,15 +213,17 @@ def create_agentic_rag_graph():
     workflow.add_conditional_edges("agent", should_continue)  # Agent -> 工具 or 结束
     workflow.add_edge("tools", "agent")  # 工具 -> Agent（闭环反馈）
 
-    # 7. 编译状态图（添加内存检查点）
-    memory = MemorySaver()
-    _compiled_graph = workflow.compile(checkpointer=memory)
+    # 7. 编译状态图（添加检查点存储）
+    checkpointer = get_checkpointer()
+    _compiled_graph = workflow.compile(checkpointer=checkpointer)
 
     print("✓ LangGraph 状态机构建完成")
     print("  - 查询重写节点：优化用户查询")
     print("  - Agent 节点：决策工具调用")
     print("  - Tool 节点：执行具体任务")
-    print("  - 记忆管理：LangGraph MemorySaver")
+    print(
+        f"  - 记忆管理：{'Redis 持久化存储' if _using_redis else 'MemorySaver (LRU 限制)'}"
+    )
     print("=" * 80)
     print()
 
