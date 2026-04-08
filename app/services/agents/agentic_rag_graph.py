@@ -79,7 +79,7 @@ def get_checkpointer():
 
             _using_redis = True
             print("✓ Redis 连接成功，使用持久化存储")
-            return RedisSaver(redis_client)
+            return RedisSaver(redis_client=redis_client)
         except ImportError:
             print("⚠️  langgraph.checkpoint.redis 未安装，降级到内存存储")
             raise
