@@ -3,11 +3,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import chat
+from app.api import agentic_chat
 
 app = FastAPI(
     title="RAG 问答系统 MVP",
-    description="基于 FastAPI 和 LangChain 的企业级问答系统",
-    version="0.2.0"
+    description="基于 FastAPI 和 LangChain 的企业级问答系统（支持 Agentic RAG）",
+    version="0.6.0",
 )
 
 # 配置 CORS（跨域资源共享）
@@ -20,10 +21,11 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(chat.router, prefix="/api", tags=["聊天"])
+app.include_router(chat.router, prefix="/api", tags=["传统 RAG"])
+app.include_router(agentic_chat.router, prefix="/api", tags=["Agentic RAG"])
 
 
 @app.get("/health")
 async def health_check():
     """健康检查接口"""
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.6.0"}

@@ -13,5 +13,18 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
+  redis:
+    image: redis:5.0.14
+    container_name: redis
+    ports:
+      - "63791:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass redis
+
 volumes:
   es_data:
+  redis_data:

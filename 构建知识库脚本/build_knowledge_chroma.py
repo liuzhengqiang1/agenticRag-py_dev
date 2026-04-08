@@ -103,7 +103,7 @@ def build_vector_store():
     print("\n⚠️  重要提示：")
     print("   如果 data/training_doc.txt 内容有更新，")
     print("   请重新运行此脚本以更新向量库！")
-    print("   运行命令：python build_knowledge.py")
+    print("   运行命令：python build_knowledge_chroma.py")
     print("=" * 60)
 
 

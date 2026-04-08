@@ -34,6 +34,9 @@ def create_hybrid_retriever():
         )
     print(f"✓ 成功连接到 Elasticsearch：{es_config.get_url()}")
 
+    # TODO 这一块可以优化成一次网络IO，ES的8.12是支持一次请求
+    # 同时完成bm25和向量检索，并通过RRF加权融合排序
+    # 这里是为了方便后期更换，模块化设计，所以分开了
     # 3. 向量检索器（ES kNN）
     vector_retriever = ESVectorRetriever(
         es_client=es_client,

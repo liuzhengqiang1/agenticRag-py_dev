@@ -9,31 +9,35 @@ sse-starlette==1.8.2              # ⭐ 用于 Server-Sent Events 流式响应
 # LangChain 核心 + 扩展
 # ------------------------------
 langchain==1.2.14
-langchain-classic>=0.1.0          # ⭐ 新增包，用于 EnsembleRetriever
-langchain-community>=0.3.30
-langchain-openai>=0.3.10
-langchain-text-splitters>=0.0.1
-langchain-chroma>=0.1.0          # ⭐ Chroma 新版，替代 langchain 内置 Chroma
+langchain-classic==1.0.3          # ⭐ 新增包，用于 EnsembleRetriever
+langchain-community==0.4.1
+langchain-openai==1.1.12
+langchain-text-splitters==1.1.1
+langchain-tavily==0.2.17
+langchain-chroma==1.1.0          # ⭐ Chroma 新版，替代 langchain 内置 Chroma
+langgraph==1.1.6            # ⭐ 工业级 Agent 状态机框架
 
 # ------------------------------
 # DashScope Embeddings
 # ------------------------------
-dashscope>=0.1.0                  # ⭐ 必须安装，支持 DashScopeEmbeddings
+dashscope==1.25.15                  # ⭐ 必须安装，支持 DashScopeEmbeddings
 
 # ------------------------------
 # 向量数据库
 # ------------------------------
-chromadb>=0.4.22                  # 最新版，兼容 telemetry 修复
+chromadb==1.5.5                  # 最新版，兼容 telemetry 修复
 elasticsearch==8.12.0             # ⭐ Elasticsearch Python 客户端
 
 # ------------------------------
 # 工具库
 # ------------------------------
 python-dotenv==1.0.0
-pydantic>=2.7.4,<3.0.0
+pydantic==2.12.5
 rank-bm25==0.2.2                  # ⭐ BM25 关键字检索算法
 flashrank==0.2.8                  # ⭐ 轻量级重排模型（无需 PyTorch）
+tavily-python==0.7.23              # ⭐ Tavily 搜索 API（用于 Agentic RAG）
+
 # ------------------------------
 # Redis（用于会话历史存储）
 # ------------------------------
-redis>=5.0.0                      # ⭐ Redis Python 客户端
+redis==7.4.0                      # ⭐ Redis Python 客户端

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic RAG 流式测试</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 800px;
+        width: 100%;
+        padding: 40px;
+      }
+
+      h1 {
+        color: #667eea;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .input-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
+      }
+
+      input[type="text"],
+      textarea {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+
+      input[type="text"]:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 80px;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+      }
+
+      button {
+        flex: 1;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-primary:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .btn-secondary {
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .btn-secondary:hover {
+        background: #e0e0e0;
+      }
+
+      .response-box {
+        background: #f9f9f9;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        min-height: 200px;
+        max-height: 400px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        line-height: 1.6;
+        color: #333;
+      }
+
+      .response-box.streaming {
+        border-color: #667eea;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          border-color: #667eea;
+        }
+        50% {
+          border-color: #764ba2;
+        }
+      }
+
+      .status {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      .status.info {
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+
+      .status.success {
+        background: #e8f5e9;
+        color: #388e3c;
+      }
+
+      .status.error {
+        background: #ffebee;
+        color: #d32f2f;
+      }
+
+      .examples {
+        margin-top: 30px;
+        padding-top: 30px;
+        border-top: 2px solid #e0e0e0;
+      }
+
+      .examples h3 {
+        color: #667eea;
+        margin-bottom: 15px;
+        font-size: 18px;
+      }
+
+      .example-item {
+        background: #f5f5f5;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .example-item:hover {
+        background: #e0e0e0;
+        transform: translateX(5px);
+      }
+
+      .example-item strong {
+        color: #667eea;
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .example-item span {
+        color: #666;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Agentic RAG 流式测试</h1>
+      <p class="subtitle">支持知识库检索、天气查询、订单查询、互联网搜索</p>
+
+      <div class="input-group">
+        <label for="sessionId">会话 ID：</label>
+        <input
+          type="text"
+          id="sessionId"
+          value="test_user_001"
+          placeholder="输入会话 ID"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="question">问题：</label>
+        <textarea id="question" placeholder="输入你的问题...">
+帮我查一下订单 9982 的状态，另外我想知道公司出差打车的报销额度是多少？对了，今天上海会下雨吗？</textarea
+        >
+      </div>
+
+      <div class="button-group">
+        <button class="btn-primary" id="sendBtn" onclick="sendQuestion()">
+          发送问题
+        </button>
+        <button class="btn-secondary" onclick="clearResponse()">
+          清空回答
+        </button>
+      </div>
+
+      <div class="input-group">
+        <label>回答：</label>
+        <div id="response" class="response-box">等待输入...</div>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="examples">
+        <h3>💡 示例问题（点击快速填充）</h3>
+        <div class="example-item" onclick="fillExample(this)">
+          <strong>复合问题（并发调用多个工具）</strong>
+          <span
+            >帮我查一下订单 9982
+            的状态，另外我想知道公司出差打车的报销额度是多少？对了，今天上海会下雨吗？</span
+          >
+        </div>
+        <div class="example-item" onclick="fillExample(this)">
+          <strong>知识库问题</strong>
+          <span>公司的培训类型有哪些？</span>
+        </div>
+        <div class="example-item" onclick="fillExample(this)">
+          <strong>天气查询</strong>
+          <span>北京今天天气怎么样？</span>
+        </div>
+        <div class="example-item" onclick="fillExample(this)">
+          <strong>订单查询</strong>
+          <span>我的订单 ORD123456 到哪了？</span>
+        </div>
+        <div class="example-item" onclick="fillExample(this)">
+          <strong>拒答测试</strong>
+          <span>帮我写一首诗</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let eventSource = null;
+
+      function fillExample(element) {
+        const questionText = element.querySelector("span").textContent;
+        document.getElementById("question").value = questionText;
+      }
+
+      function clearResponse() {
+        document.getElementById("response").textContent = "等待输入...";
+        document.getElementById("response").classList.remove("streaming");
+        document.getElementById("status").innerHTML = "";
+      }
+
+      function showStatus(message, type = "info") {
+        const statusDiv = document.getElementById("status");
+        statusDiv.className = `status ${type}`;
+        statusDiv.textContent = message;
+      }
+
+      async function sendQuestion() {
+        const sessionId = document.getElementById("sessionId").value.trim();
+        const question = document.getElementById("question").value.trim();
+        const responseDiv = document.getElementById("response");
+        const sendBtn = document.getElementById("sendBtn");
+
+        if (!question) {
+          showStatus("请输入问题！", "error");
+          return;
+        }
+
+        // 关闭之前的连接
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        // 清空回答区域
+        responseDiv.textContent = "";
+        responseDiv.classList.add("streaming");
+        sendBtn.disabled = true;
+        showStatus("正在连接 Agentic RAG...", "info");
+
+        try {
+          // 发送 POST 请求
+          const response = await fetch(
+            "http://localhost:8000/api/agentic-chat-stream",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                question: question,
+                session_id: sessionId,
+              }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          showStatus("正在接收回答...", "info");
+
+          // 读取流式响应
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+              break;
+            }
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+
+                if (data === "[DONE]") {
+                  responseDiv.classList.remove("streaming");
+                  showStatus("✅ 回答完成！", "success");
+                  sendBtn.disabled = false;
+                  return;
+                } else if (data.startsWith("[ERROR]")) {
+                  responseDiv.classList.remove("streaming");
+                  showStatus(`❌ 错误：${data.slice(8)}`, "error");
+                  sendBtn.disabled = false;
+                  return;
+                } else {
+                  responseDiv.textContent += data;
+                  responseDiv.scrollTop = responseDiv.scrollHeight;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          responseDiv.classList.remove("streaming");
+          responseDiv.textContent = `连接失败：${error.message}`;
+          showStatus(`❌ 连接失败：${error.message}`, "error");
+          sendBtn.disabled = false;
+        }
+      }
+
+      // 支持回车发送
+      document
+        .getElementById("question")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && e.ctrlKey) {
+            sendQuestion();
+          }
+        });
+    </script>
+  </body>
+</html>
