@@ -47,6 +47,7 @@ class AgenticChatResponse(BaseModel):
 async def agentic_chat(request: AgenticChatRequest):
     """
     Agentic RAG 聊天接口（非流式）
+    TODO 没有同步聊天需求，暂未修复bug
 
     支持的功能：
     - 知识库检索（培训制度、报销流程等）

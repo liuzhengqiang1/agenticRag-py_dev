@@ -7,6 +7,22 @@ from app.services.retrievers.ensemble_retriever import create_hybrid_retriever
 from app.services.utils.formatters import format_docs
 
 
+# ============================================================
+# 检索器单例（模块加载时初始化一次）
+# ============================================================
+_retriever = None
+
+
+def _get_retriever():
+    """获取检索器单例"""
+    global _retriever
+    if _retriever is None:
+        print("🔧 [RAG Tool] 初始化检索器...")
+        _retriever = create_hybrid_retriever()
+        print("✓ [RAG Tool] 检索器初始化完成")
+    return _retriever
+
+
 @tool
 def search_knowledge_base(query: str) -> str:
     """
@@ -26,8 +42,8 @@ def search_knowledge_base(query: str) -> str:
     print(f"🔍 [RAG Tool] 检索查询：{query}")
 
     try:
-        # 混合检索
-        retriever = create_hybrid_retriever()
+        # 使用单例检索器
+        retriever = _get_retriever()
         docs = retriever.invoke(query)
 
         if not docs:

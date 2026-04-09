@@ -1,14 +1,29 @@
 # -*- coding: utf-8 -*-
 """FastAPI 应用实例"""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api import chat
 from app.api import agentic_chat
+from app.services.agents.agentic_rag_graph import init_agentic_rag
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时初始化
+    await init_agentic_rag()
+    yield
+    # 关闭时清理（如有需要）
+
 
 app = FastAPI(
     title="RAG 问答系统 MVP",
     description="基于 FastAPI 和 LangChain 的企业级问答系统（支持 Agentic RAG）",
     version="0.6.0",
+    lifespan=lifespan,
 )
 
 # 配置 CORS（跨域资源共享）
