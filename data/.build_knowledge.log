@@ -1,0 +1,193 @@
+2026-04-09 18:06:11,573 [INFO] ======================================================================
+2026-04-09 18:06:11,573 [INFO] 开始构建 Elasticsearch 知识库 v2.1
+2026-04-09 18:06:11,573 [INFO] 支持：Multi-Vector 检索 + 图表智能处理 + 大小表分流
+2026-04-09 18:06:11,574 [INFO] ======================================================================
+2026-04-09 18:06:11,574 [INFO] [1/8] 正在连接 Elasticsearch...
+2026-04-09 18:06:11,588 [INFO] HEAD http://localhost:9200/ [status:200 duration:0.014s]
+2026-04-09 18:06:11,589 [INFO] 成功连接到 ES：http://localhost:9200
+2026-04-09 18:06:11,589 [INFO] [2/8] 正在检查/创建索引...
+2026-04-09 18:06:11,591 [INFO] HEAD http://localhost:9200/training_docs [status:200 duration:0.002s]
+2026-04-09 18:06:11,591 [INFO] [3/8] 正在扫描 Markdown 文档...
+2026-04-09 18:06:11,592 [INFO] 找到 4 个 Markdown 文件
+2026-04-09 18:06:11,592 [INFO] [4/8] 正在检查增量更新...
+2026-04-09 18:06:11,592 [ERROR] 构建过程出错: Expecting value: line 1 column 1 (char 0)
+Traceback (most recent call last):
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\build_knowledge_es.py", line 453, in build
+    files_to_process = self.filter_incremental(markdown_files)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\build_knowledge_es.py", line 146, in filter_incremental
+    self.imported_files = load_json_file(IMPORTED_FILES_RECORD)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\file_utils.py", line 27, in load_json_file
+    return json.load(f)
+           ^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-04-09 18:06:11,619 [INFO] ======================================================================
+2026-04-09 18:06:11,619 [INFO] 知识库构建完成
+2026-04-09 18:06:11,619 [INFO] ======================================================================
+2026-04-09 18:06:11,619 [INFO] 统计信息：
+2026-04-09 18:06:11,619 [INFO]   处理文件数: 0
+2026-04-09 18:06:11,619 [INFO]   成功文件数: 0
+2026-04-09 18:06:11,619 [INFO]   失败文件数: 0
+2026-04-09 18:06:11,619 [INFO]   导入文本块: 0
+2026-04-09 18:06:11,619 [INFO]   处理图片数: 0
+2026-04-09 18:06:11,619 [INFO]   处理表格数: 0
+2026-04-09 18:06:11,619 [INFO]   API 调用数: 0
+2026-04-09 18:06:11,619 [INFO]   缓存记录数: 0
+2026-04-09 18:06:11,619 [INFO]   总耗时: 0.05s
+2026-04-09 18:06:11,619 [INFO]   索引名称: training_docs
+2026-04-09 18:06:11,619 [INFO] ======================================================================
+2026-04-09 18:06:11,619 [INFO] 提示：
+2026-04-09 18:06:11,620 [INFO]   图片和表格已智能处理（Multi-Vector 模式）
+2026-04-09 18:06:11,620 [INFO]   小表直接入库，大表生成摘要，巨型表表头广播
+2026-04-09 18:06:11,620 [INFO]   分析结果已缓存，重复运行不会重复调用 API
+2026-04-09 18:06:11,620 [INFO]   日志文件: D:\Study\pythonAi\langchain-mvp\data\.build_knowledge.log
+2026-04-09 18:06:11,620 [INFO] ======================================================================
+2026-04-09 18:06:11,620 [INFO] ES 连接已关闭
+2026-04-09 18:06:11,620 [ERROR] 构建失败：Expecting value: line 1 column 1 (char 0)
+Traceback (most recent call last):
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\run.py", line 21, in <module>
+    build_es_knowledge_base()
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\build_knowledge_es.py", line 472, in build_es_knowledge_base
+    builder.build()
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\build_knowledge_es.py", line 453, in build
+    files_to_process = self.filter_incremental(markdown_files)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\build_knowledge_es.py", line 146, in filter_incremental
+    self.imported_files = load_json_file(IMPORTED_FILES_RECORD)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Study\pythonAi\langchain-mvp\build_knowledge\build_mutilKnowledge_es\file_utils.py", line 27, in load_json_file
+    return json.load(f)
+           ^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\envs\mvp\Lib\json\decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-04-09 18:08:13,289 [INFO] ======================================================================
+2026-04-09 18:08:13,289 [INFO] 开始构建 Elasticsearch 知识库 v2.1
+2026-04-09 18:08:13,289 [INFO] 支持：Multi-Vector 检索 + 图表智能处理 + 大小表分流
+2026-04-09 18:08:13,289 [INFO] ======================================================================
+2026-04-09 18:08:13,289 [INFO] [1/8] 正在连接 Elasticsearch...
+2026-04-09 18:08:13,303 [INFO] HEAD http://localhost:9200/ [status:200 duration:0.013s]
+2026-04-09 18:08:13,304 [INFO] 成功连接到 ES：http://localhost:9200
+2026-04-09 18:08:13,304 [INFO] [2/8] 正在检查/创建索引...
+2026-04-09 18:08:13,306 [INFO] HEAD http://localhost:9200/training_docs [status:200 duration:0.002s]
+2026-04-09 18:08:13,306 [INFO] [3/8] 正在扫描 Markdown 文档...
+2026-04-09 18:08:13,307 [INFO] 找到 4 个 Markdown 文件
+2026-04-09 18:08:13,307 [INFO] [4/8] 正在检查增量更新...
+2026-04-09 18:08:13,308 [INFO] 需要处理 4 个文件（新增或已变更）
+2026-04-09 18:08:13,308 [INFO] [5/8] 正在加载元素分析缓存...
+2026-04-09 18:08:13,308 [INFO] 缓存中已有 0 条分析记录
+2026-04-09 18:08:13,308 [INFO] [6/8] 正在初始化 Embedding 模型...
+2026-04-09 18:08:13,435 [INFO] Embedding 模型初始化成功（text-embedding-v4，1024 维）
+2026-04-09 18:08:13,435 [INFO] [7/8] 正在处理文档（Multi-Vector 模式）...
+2026-04-09 18:08:13,435 [INFO] [1/4] 处理文件: D:\Study\pythonAi\langchain-mvp\data\documents\README.md
+2026-04-09 18:08:13,435 [INFO]   标题: README, 作者: 未知, 部门: 未知部门
+2026-04-09 18:08:13,435 [INFO]   正在扫描图片和表格...
+2026-04-09 18:08:13,436 [INFO]   发现 0 个图片，1 个表格
+2026-04-09 18:08:13,436 [INFO]   表格分类: 小表 1, 大表 0, 巨型表 0
+2026-04-09 18:08:13,436 [INFO]   切分: 7 个文本块
+2026-04-09 18:08:14,950 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_1 [status:201 duration:0.082s]
+2026-04-09 18:08:15,014 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_2 [status:201 duration:0.063s]
+2026-04-09 18:08:15,078 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_3 [status:201 duration:0.063s]
+2026-04-09 18:08:15,137 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_4 [status:201 duration:0.058s]
+2026-04-09 18:08:15,200 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_5 [status:201 duration:0.061s]
+2026-04-09 18:08:15,258 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_6 [status:201 duration:0.058s]
+2026-04-09 18:08:15,321 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_unknown_README_chunk_7 [status:201 duration:0.061s]
+2026-04-09 18:08:15,321 [INFO]   成功导入 7 个文本块 (耗时 1.89s)
+2026-04-09 18:08:15,321 [INFO] [2/4] 处理文件: D:\Study\pythonAi\langchain-mvp\data\documents\employee\测试部\2024\测试文档_张三_20240115.md
+2026-04-09 18:08:15,322 [INFO]   标题: 测试文档, 作者: 张三, 部门: 测试部
+2026-04-09 18:08:15,322 [INFO]   正在扫描图片和表格...
+2026-04-09 18:08:15,322 [INFO]   发现 0 个图片，2 个表格
+2026-04-09 18:08:15,322 [INFO]   表格分类: 小表 1, 大表 1, 巨型表 0
+2026-04-09 18:08:15,322 [INFO]   需要分析: 0 个图片, 1 个表格
+2026-04-09 18:08:32,372 [INFO]   正在注入分析结果...
+2026-04-09 18:08:32,373 [INFO]   切分: 6 个文本块
+2026-04-09 18:08:33,238 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_1 [status:201 duration:0.061s]
+2026-04-09 18:08:33,300 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_2 [status:201 duration:0.060s]
+2026-04-09 18:08:33,362 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_3 [status:201 duration:0.061s]
+2026-04-09 18:08:33,424 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_4 [status:201 duration:0.061s]
+2026-04-09 18:08:33,484 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_5 [status:201 duration:0.059s]
+2026-04-09 18:08:33,546 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3_chunk_6 [status:201 duration:0.061s]
+2026-04-09 18:08:33,547 [INFO]   成功导入 6 个文本块 (耗时 18.23s)
+2026-04-09 18:08:33,547 [INFO] [3/4] 处理文件: D:\Study\pythonAi\langchain-mvp\data\documents\employee\销售部\2024\销售培训_张三_20240115.md
+2026-04-09 18:08:33,547 [INFO]   标题: 销售培训, 作者: 张三, 部门: 销售部
+2026-04-09 18:08:33,547 [INFO]   正在扫描图片和表格...
+2026-04-09 18:08:33,547 [INFO]   发现 0 个图片，0 个表格
+2026-04-09 18:08:33,547 [INFO]   表格分类: 小表 0, 大表 0, 巨型表 0
+2026-04-09 18:08:33,547 [INFO]   切分: 13 个文本块
+2026-04-09 18:08:35,395 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_1 [status:201 duration:0.060s]
+2026-04-09 18:08:35,456 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_2 [status:201 duration:0.060s]
+2026-04-09 18:08:35,514 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_3 [status:201 duration:0.057s]
+2026-04-09 18:08:35,571 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_4 [status:201 duration:0.056s]
+2026-04-09 18:08:35,632 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_5 [status:201 duration:0.060s]
+2026-04-09 18:08:35,693 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_6 [status:201 duration:0.059s]
+2026-04-09 18:08:35,750 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_7 [status:201 duration:0.056s]
+2026-04-09 18:08:35,810 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_8 [status:201 duration:0.058s]
+2026-04-09 18:08:35,869 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_9 [status:201 duration:0.058s]
+2026-04-09 18:08:35,929 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_10 [status:201 duration:0.059s]
+2026-04-09 18:08:37,752 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_11 [status:201 duration:0.058s]
+2026-04-09 18:08:37,810 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_12 [status:201 duration:0.057s]
+2026-04-09 18:08:37,869 [INFO] PUT http://localhost:9200/training_docs/_doc/employee_2024_%E9%94%80%E5%94%AE%E5%9F%B9%E8%AE%AD_chunk_13 [status:201 duration:0.058s]
+2026-04-09 18:08:37,869 [INFO]   成功导入 13 个文本块 (耗时 4.32s)
+2026-04-09 18:08:37,869 [INFO] [4/4] 处理文件: D:\Study\pythonAi\langchain-mvp\data\documents\manager\技术部\2024\软件培训_技术部_20240201.md
+2026-04-09 18:08:37,870 [INFO]   标题: 软件培训, 作者: 技术部, 部门: 技术部
+2026-04-09 18:08:37,870 [INFO]   正在扫描图片和表格...
+2026-04-09 18:08:37,870 [INFO]   发现 0 个图片，0 个表格
+2026-04-09 18:08:37,870 [INFO]   表格分类: 小表 0, 大表 0, 巨型表 0
+2026-04-09 18:08:37,870 [INFO]   切分: 10 个文本块
+2026-04-09 18:08:39,230 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_1 [status:201 duration:0.060s]
+2026-04-09 18:08:39,287 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_2 [status:201 duration:0.057s]
+2026-04-09 18:08:39,347 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_3 [status:201 duration:0.059s]
+2026-04-09 18:08:39,409 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_4 [status:201 duration:0.061s]
+2026-04-09 18:08:39,467 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_5 [status:201 duration:0.057s]
+2026-04-09 18:08:39,526 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_6 [status:201 duration:0.058s]
+2026-04-09 18:08:39,583 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_7 [status:201 duration:0.057s]
+2026-04-09 18:08:39,643 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_8 [status:201 duration:0.060s]
+2026-04-09 18:08:39,704 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_9 [status:201 duration:0.059s]
+2026-04-09 18:08:39,762 [INFO] PUT http://localhost:9200/training_docs/_doc/manager_2024_%E8%BD%AF%E4%BB%B6%E5%9F%B9%E8%AE%AD_chunk_10 [status:201 duration:0.057s]
+2026-04-09 18:08:39,762 [INFO]   成功导入 10 个文本块 (耗时 1.89s)
+2026-04-09 18:08:39,788 [INFO] POST http://localhost:9200/training_docs/_refresh [status:200 duration:0.027s]
+2026-04-09 18:08:39,788 [INFO] ES 索引已刷新
+2026-04-09 18:08:39,790 [INFO] 所有记录已保存
+2026-04-09 18:08:39,790 [INFO] ======================================================================
+2026-04-09 18:08:39,790 [INFO] 知识库构建完成
+2026-04-09 18:08:39,790 [INFO] ======================================================================
+2026-04-09 18:08:39,790 [INFO] 统计信息：
+2026-04-09 18:08:39,790 [INFO]   处理文件数: 4
+2026-04-09 18:08:39,790 [INFO]   成功文件数: 4
+2026-04-09 18:08:39,790 [INFO]   失败文件数: 0
+2026-04-09 18:08:39,790 [INFO]   导入文本块: 36
+2026-04-09 18:08:39,790 [INFO]   处理图片数: 0
+2026-04-09 18:08:39,790 [INFO]   处理表格数: 3
+2026-04-09 18:08:39,790 [INFO]   API 调用数: 1
+2026-04-09 18:08:39,790 [INFO]   缓存记录数: 1
+2026-04-09 18:08:39,790 [INFO]   总耗时: 26.50s
+2026-04-09 18:08:39,790 [INFO]   索引名称: training_docs
+2026-04-09 18:08:39,790 [INFO] ======================================================================
+2026-04-09 18:08:39,790 [INFO] 提示：
+2026-04-09 18:08:39,790 [INFO]   图片和表格已智能处理（Multi-Vector 模式）
+2026-04-09 18:08:39,791 [INFO]   小表直接入库，大表生成摘要，巨型表表头广播
+2026-04-09 18:08:39,791 [INFO]   分析结果已缓存，重复运行不会重复调用 API
+2026-04-09 18:08:39,791 [INFO]   日志文件: D:\Study\pythonAi\langchain-mvp\data\.build_knowledge.log
+2026-04-09 18:08:39,791 [INFO] ======================================================================
+2026-04-09 18:08:39,791 [INFO] ES 连接已关闭

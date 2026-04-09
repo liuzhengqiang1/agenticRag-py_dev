@@ -128,7 +128,7 @@ def extract_tables_from_markdown(content: str) -> List[Dict]:
 
 def filter_image(image_info: Dict, file_dir: str) -> bool:
     """过滤无效图片（装饰线、图标等）"""
-    config = ProcessConfig()
+    config = ProcessConfig
     image_url = image_info["url"]
 
     if image_url.startswith("http://") or image_url.startswith("https://"):
@@ -159,12 +159,17 @@ def filter_image(image_info: Dict, file_dir: str) -> bool:
                 aspect_ratio = max(width, height) / min(width, height)
                 if aspect_ratio > config.MAX_ASPECT_RATIO:
                     return False
-        except:
+        except ImportError:
+            # PIL 不可用时，只检查文件大小
+            pass
+        except Exception:
+            # 图片打开失败，保守处理：保留
             pass
 
         return True
 
-    except Exception as e:
+    except Exception:
+        # 发生异常时保守处理：保留图片
         return True
 
 

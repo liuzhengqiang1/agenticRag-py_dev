@@ -23,8 +23,14 @@ def calculate_content_hash(content: str) -> str:
 def load_json_file(file_path: str) -> Dict:
     """加载 JSON 文件"""
     if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    return {}
+                return json.loads(content)
+        except (json.JSONDecodeError, IOError):
+            return {}
     return {}
 
 
