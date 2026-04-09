@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  # FastAPI 应用
+  app:
+    build: ..
+    container_name: AI-app
+    ports:
+      - "8100:8100"
+    environment:
+      # 阿里云百炼 API
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+      # Redis 配置（使用容器内部网络）
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis
+      - REDIS_DB=0
+
+      # Elasticsearch 配置（使用容器内部网络）
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - ES_USERNAME=
+      - ES_PASSWORD=
+      - ES_INDEX_NAME=training_docs
+    depends_on:
+      - redis
+      - elasticsearch
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Redis（会话存储）
+  redis:
+    image: redis/redis-stack-server:7.2.0-v10
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-stack-server
+      --appendonly yes
+      --requirepass redis
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --protected-mode yes
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Elasticsearch（知识库检索）
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: rag-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+networks:
+  rag-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  es-data:

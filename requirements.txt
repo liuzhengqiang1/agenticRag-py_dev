@@ -3,6 +3,7 @@
 # ------------------------------
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
+gunicorn==21.2.0                  # ⭐ 生产级 WSGI 服务器
 sse-starlette==1.8.2              # ⭐ 用于 Server-Sent Events 流式响应
 
 # ------------------------------

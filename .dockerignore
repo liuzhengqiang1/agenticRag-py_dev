@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker/Dockerfile
+docker-compose*.yml
+
+# 测试文件
+test_*.html
+test_*.py
+*.bat
+
+# 数据文件（知识库需要在容器内重新构建）
+vector_store/
+data/documents/
+
+# 环境变量（通过 docker-compose 传入）
+.env
+
+# 文档
+README.md
+*.md
