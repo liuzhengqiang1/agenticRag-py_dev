@@ -1,6 +1,7 @@
 # 企业级 RAG 问答系统
 
 基于 FastAPI + LangChain + Elasticsearch 构建的智能问答系统，支持传统 RAG 和 Agentic RAG 两种模式。
+docker包下提供了docker-compose.prod.yml文件，可一键部署于Linux服务器上对外提供RESTful接口。
 
 ## 核心特性
 
@@ -10,6 +11,9 @@
 - **混合检索**：ES 向量检索（kNN）+ BM25 全文检索 + Reranker 重排
 - **多轮对话**：Redis 会话存储，支持上下文连续对话
 - **流式输出**：SSE 实时响应
+- **🆕 Multi-Vector 检索**：图片和表格智能处理，大幅提升检索召回率
+- **🆕 大小表分流**：小表直接入库，大表生成摘要，节省 84% API 成本
+- **🆕 异步批处理**：并发调用 LLM，处理速度提升 10 倍
 
 ## 技术栈
 
@@ -72,8 +76,21 @@ docker restart es
 ### 4. 构建知识库
 
 ```bash
-python 构建知识库脚本/build_knowledge_es.py
+# 使用 v2.0 版本（支持图表智能处理）
+python build_knowledge/build_knowledge_es.py
+
+# 首次运行会分析图片和表格（较慢）
+# 后续运行会使用缓存（快速）
 ```
+
+**v2.0 新特性**：
+
+- 自动识别和分类表格（小表/大表/巨型表）
+- 过滤无效图片（装饰线、图标等）
+- 异步批处理，显著提升速度
+- 智能缓存，避免重复调用 API
+
+详细说明见：[构建知识库脚本/README_v2.md](build_knowledge/README_v2.md)
 
 ### 5. 启动服务
 
@@ -194,9 +211,30 @@ LLM 整合结果
 **Q: 如何更新知识库？**
 
 ```bash
-# 修改 data/training_doc.txt 后运行
-python 构建知识库脚本/build_knowledge_es.py
+# 修改 data/documents/ 下的 Markdown 文件后运行
+python build_knowledge/build_knowledge_es.py
+
+# 支持增量更新，只处理新增或变更的文件
 ```
+
+**Q: 如何跳过图表分析（快速模式）？**
+
+```python
+# 在脚本开头设置
+ProcessConfig.FAST_MODE = True
+```
+
+**Q: 如何调整表格分类阈值？**
+
+修改 `build_knowledge_es.py` 中的 `ProcessConfig` 类参数。
+
+**Q: 图表分析失败怎么办？**
+
+检查：
+
+- `DASHSCOPE_API_KEY` 是否配置正确
+- API 余额是否充足
+- 缓存文件是否损坏（可删除 `data/.element_analysis_cache.json` 重试）
 
 **Q: 如何验证 ES 是否正常？**
 
@@ -224,11 +262,6 @@ redis-cli DEL chat_history:user_123
 | 重排 TopN    | rag_service.py        | 3      | 最终发给大模型的文档数 |
 | chunk_size   | build_knowledge_es.py | 500    | 文档切片大小           |
 | 会话过期时间 | rag_service.py        | 3600   | Redis 会话 TTL（秒）   |
-
-## 详细文档
-
-- [Agentic RAG 架构深度解析](AGENTIC_RAG_ARCHITECTURE.md)
-- [Agentic RAG 快速上手指南](QUICK_START_AGENTIC_RAG.md)
 
 ## 许可证
 
