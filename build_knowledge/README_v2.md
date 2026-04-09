@@ -1,5 +1,9 @@
 # Elasticsearch 知识库构建脚本 v2.0
 
+采用本地部署的MinerU实现不同类型的文档通一转markdown
+项目中图片实际在转换时就已经替换成minio的filekey，需要通过fileKey获取预签名URL获取图片
+RAG回答时也是需要前端根据fileKey获取图片，当前项目采取简化措施->本地读取。
+
 ## 新增功能
 
 ### 1. Multi-Vector 检索架构

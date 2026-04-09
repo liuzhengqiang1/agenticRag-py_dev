@@ -64,7 +64,7 @@ class KnowledgeBaseBuilder:
     def scan_files(self):
         """扫描文档"""
         print("\n[3/8] 正在扫描 Markdown 文档...")
-        markdown_files = scan_markdown_files("data")
+        markdown_files = scan_markdown_files("../../data")
 
         if not markdown_files:
             print("  ⚠️  未找到任何 Markdown 文件，请检查 data 目录")
