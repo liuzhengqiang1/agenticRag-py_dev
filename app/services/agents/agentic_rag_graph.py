@@ -31,6 +31,7 @@ from app.services.tools import (
 from app.services.llm.query_rewriter import (
     need_query_rewrite_from_messages,
     rewrite_query_from_messages,
+    rewrite_query_from_messages_async,
 )
 
 # 全局变量：缓存编译后的状态图
@@ -141,8 +142,8 @@ def create_agentic_rag_graph():
     llm_with_tools = llm.bind_tools(tools)
     print("✓ 大模型已绑定所有工具")
 
-    # 3. 定义查询重写节点
-    def query_rewrite_node(state: AgenticRAGState):
+    # 3. 定义查询重写节点（异步版本，兼容同步调用）
+    async def query_rewrite_node(state: AgenticRAGState):
         """
         查询重写节点：在调用工具前优化查询
 
@@ -162,7 +163,9 @@ def create_agentic_rag_graph():
 
         # 判断是否需要重写
         if need_query_rewrite_from_messages(user_question, messages[:-1]):
-            rewritten = rewrite_query_from_messages(user_question, messages[:-1])
+            rewritten = await rewrite_query_from_messages_async(
+                user_question, messages[:-1]
+            )
             return {"rewritten_query": rewritten}
 
         return {"rewritten_query": user_question}
@@ -204,7 +207,7 @@ def create_agentic_rag_graph():
     # 6. 构建状态图
     workflow = StateGraph(AgenticRAGState)
 
-    # 添加节点
+    # 添加节点（直接使用异步函数，LangGraph 会自动处理）
     workflow.add_node("query_rewrite", query_rewrite_node)  # 查询重写节点
     workflow.add_node("agent", agent_node)  # Agent 决策节点
     workflow.add_node("tools", ToolNode(tools))  # 工具执行节点
@@ -287,18 +290,27 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
     # 获取状态图
     graph = create_agentic_rag_graph()
 
-    config = {"configurable": {"thread_id": session_id}}
+    config = {
+        "configurable": {"thread_id": session_id},
+        "recursion_limit": 50,  # 增加递归限制
+    }
 
+    # 使用 astream_events v2 版本，更稳定
     async for event in graph.astream_events(
-        {"messages": [HumanMessage(content=user_question)]}, config=config, version="v1"
+        input={"messages": [HumanMessage(content=user_question)]},
+        config=config,
+        version="v2",  # 使用 v2 版本
     ):
         kind = event["event"]
 
         # 只处理 LLM 的流式输出
         if kind == "on_chat_model_stream":
-            content = event["data"]["chunk"].content
-            if content:
-                yield content
+            # v2 版本的数据结构
+            chunk = event.get("data", {}).get("chunk")
+            if chunk and hasattr(chunk, "content"):
+                content = chunk.content
+                if content:
+                    yield content
 
     print("=" * 80)
     print("✅ 流式输出完成")
