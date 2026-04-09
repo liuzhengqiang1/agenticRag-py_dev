@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   elasticsearch:
@@ -13,29 +14,17 @@ services:
       - es_data:/usr/share/elasticsearch/data
 
   redis:
-    image: redis/redis-stack-server:7.2.0-v10  # 解决RedisSaver报错unknown command 'JSON.SET'，注意command为redis-stack-server
+    image: redis:5.0.14
     container_name: redis
     ports:
       - "63791:6379"
     volumes:
       - redis_data:/data
     command: >
-      redis-stack-server
+      redis-server
       --appendonly yes
       --requirepass redis
-      --maxmemory 2gb             
-      --maxmemory-policy allkeys-lru  
-      --save 900 1                
-      --save 300 10               
-      --save 60 10000             
-      --protected-mode yes        
 
-#      --maxmemory 2gb             # 设置最大内存，防止内存暴涨
-#      --maxmemory-policy allkeys-lru  # LRU 淘汰策略
-#      --save 900 1                # 每 15 分钟至少有 1 次修改时保存快照
-#      --save 300 10               # 每 5 分钟至少有 10 次修改时保存快照
-#      --save 60 10000             # 每分钟至少有 10000 次修改时保存快照
-#      --protected-mode yes        # 开启保护模式
 volumes:
   es_data:
   redis_data:
