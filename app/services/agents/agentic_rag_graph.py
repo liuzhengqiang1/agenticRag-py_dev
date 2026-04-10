@@ -37,18 +37,23 @@ from app.services.llm.query_rewriter import (
     need_query_rewrite_from_messages,
     rewrite_query_from_messages_async,
 )
+from app.services.agents.query_cache import QueryCache
 
 
 class AgenticRAGState(MessagesState):
     """
-    扩展的状态定义，支持查询重写
+    扩展的状态定义，支持查询重写和缓存
 
     属性：
         messages: 对话消息列表（继承自 MessagesState）
         rewritten_query: 重写后的查询（用于优化检索）
+        cache_hit: 是否命中缓存
+        cached_answer: 缓存的回答
     """
 
     rewritten_query: str = ""
+    cache_hit: bool = False
+    cached_answer: str = ""
 
 
 class AgenticRAGGraph:
@@ -92,13 +97,16 @@ class AgenticRAGGraph:
             return cls._instance
 
         print("=" * 80)
-        print("🚀 Agentic RAG 系统初始化中...")
+        print("Agentic RAG 系统初始化中...")
         print("=" * 80)
 
         # 创建实例
         instance = cls()
 
-        # 1. 整合全量工具箱
+        # 1. 初始化 Query 缓存
+        await QueryCache.initialize()
+
+        # 2. 整合全量工具箱
         tools = [
             search_knowledge_base,  # RAG 知识库检索
             get_current_weather,  # 天气查询
@@ -110,32 +118,33 @@ class AgenticRAGGraph:
         if web_search_tool:
             tools.append(web_search_tool)
 
-        print(f"✓ 已注册 {len(tools)} 个工具：{[t.name for t in tools]}")
+        print(f"  已注册 {len(tools)} 个工具：{[t.name for t in tools]}")
 
-        # 2. 初始化大模型并绑定工具
+        # 3. 初始化大模型并绑定工具
         instance._llm = ChatOpenAI(model="qwen-turbo", temperature=0)
         instance._llm_with_tools = instance._llm.bind_tools(tools)
         instance._tools = tools
-        print("✓ 大模型已绑定所有工具")
+        print("  大模型已绑定所有工具")
 
-        # 3. 获取 checkpointer
+        # 4. 获取 checkpointer
         instance._checkpointer = cls._create_checkpointer()
 
-        # 4. 如果使用 Redis，初始化表结构
+        # 5. 如果使用 Redis，初始化表结构
         if cls._using_redis:
             try:
                 await instance._checkpointer.asetup()
-                print("✓ Redis 表结构初始化完成")
+                print("  Redis 表结构初始化完成")
             except Exception as e:
-                print(f"⚠️  Redis 表结构初始化失败（可能已存在）：{e}")
+                print(f"  Redis 表结构初始化失败（可能已存在）：{e}")
 
-        # 5. 构建状态图
+        # 6. 构建状态图
         instance._graph = cls._build_graph(instance)
 
         cls._initialized = True
 
-        print("✓ LangGraph 状态机构建完成")
+        print("  LangGraph 状态机构建完成")
         print("  - 查询重写节点：优化用户查询")
+        print("  - 缓存查询节点：语义相似度匹配")
         print("  - Agent 节点：决策工具调用")
         print("  - Tool 节点：执行具体任务")
         print(
@@ -215,6 +224,33 @@ class AgenticRAGGraph:
 
             return {"rewritten_query": user_question}
 
+        # 定义缓存查询节点
+        async def cache_lookup_node(state: AgenticRAGState):
+            """
+            缓存查询节点：查找相似问题的缓存回答
+
+            如果命中缓存，直接返回缓存结果，跳过 LLM 调用
+            """
+            rewritten_query = state.get("rewritten_query", "")
+            if not rewritten_query:
+                # 使用原始问题
+                messages = state["messages"]
+                if messages and isinstance(messages[-1], HumanMessage):
+                    rewritten_query = messages[-1].content
+
+            if not rewritten_query:
+                return {"cache_hit": False, "cached_answer": ""}
+
+            # 查找相似问题
+            result = await QueryCache.get_similar(rewritten_query)
+
+            if result:
+                cached_answer, similarity = result
+                print(f"  [缓存命中] 相似度: {similarity:.2%}")
+                return {"cache_hit": True, "cached_answer": cached_answer}
+
+            return {"cache_hit": False, "cached_answer": ""}
+
         # 定义 Agent 节点
         def agent_node(state: AgenticRAGState):
             """
@@ -236,8 +272,38 @@ class AgenticRAGGraph:
 
             return {"messages": [response]}
 
+        # 定义缓存写入节点
+        async def cache_write_node(state: AgenticRAGState):
+            """
+            缓存写入节点：将问题和回答写入缓存
+            """
+            # 只有未命中缓存时才写入
+            if state.get("cache_hit"):
+                return {}
+
+            rewritten_query = state.get("rewritten_query", "")
+            if not rewritten_query:
+                messages = state["messages"]
+                if messages and isinstance(messages[-1], HumanMessage):
+                    rewritten_query = messages[-1].content
+
+            if not rewritten_query:
+                return {}
+
+            # 获取最终回答
+            messages = state["messages"]
+            final_answer = messages[-1].content if messages else ""
+
+            if final_answer:
+                await QueryCache.set(rewritten_query, final_answer)
+                print("  [缓存写入] 问题已缓存")
+
+            return {}
+
         # 定义路由逻辑
-        def should_continue(state: AgenticRAGState) -> Literal["tools", END]:
+        def should_continue(
+            state: AgenticRAGState,
+        ) -> Literal["tools", "cache_write"]:
             """路由函数：判断是否需要继续调用工具"""
             messages = state["messages"]
             last_message = messages[-1]
@@ -246,20 +312,30 @@ class AgenticRAGGraph:
             if last_message.tool_calls:
                 return "tools"
 
-            # 否则结束流程
-            return END
+            # 否则写入缓存后结束
+            return "cache_write"
+
+        def route_after_cache_lookup(state: AgenticRAGState) -> Literal["agent", END]:
+            """缓存查询后的路由：命中则直接结束"""
+            if state.get("cache_hit"):
+                return END
+            return "agent"
 
         # 构建状态图
         workflow = StateGraph(AgenticRAGState)
 
         workflow.add_node("query_rewrite", query_rewrite_node)
+        workflow.add_node("cache_lookup", cache_lookup_node)
         workflow.add_node("agent", agent_node)
         workflow.add_node("tools", ToolNode(instance._tools))
+        workflow.add_node("cache_write", cache_write_node)
 
         workflow.add_edge(START, "query_rewrite")
-        workflow.add_edge("query_rewrite", "agent")
+        workflow.add_edge("query_rewrite", "cache_lookup")
+        workflow.add_conditional_edges("cache_lookup", route_after_cache_lookup)
         workflow.add_conditional_edges("agent", should_continue)
         workflow.add_edge("tools", "agent")
+        workflow.add_edge("cache_write", END)
 
         return workflow.compile(checkpointer=instance._checkpointer)
 
@@ -296,8 +372,8 @@ def run_agentic_rag(user_question: str, session_id: str = "default") -> str:
     返回:
         最终回答
     """
-    print(f"👤 用户问题：{user_question}")
-    print(f"🔑 会话 ID：{session_id}")
+    print(f"用户问题：{user_question}")
+    print(f"会话 ID：{session_id}")
     print("=" * 80)
 
     # 获取状态图
@@ -323,11 +399,14 @@ def run_agentic_rag(user_question: str, session_id: str = "default") -> str:
     except RuntimeError:
         result = asyncio.run(_run())
 
-    # 提取最终回答
-    final_answer = result["messages"][-1].content
+    # 提取最终回答（优先使用缓存回答）
+    if result.get("cache_hit"):
+        final_answer = result.get("cached_answer", "")
+    else:
+        final_answer = result["messages"][-1].content
 
     print("=" * 80)
-    print(f"💬 最终回答：{final_answer}")
+    print(f"最终回答：{final_answer}")
     print("=" * 80)
     print()
 
@@ -345,8 +424,8 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
     返回:
         异步生成器，逐块返回回答
     """
-    print(f"👤 用户问题：{user_question}")
-    print(f"🔑 会话 ID：{session_id}")
+    print(f"用户问题：{user_question}")
+    print(f"会话 ID：{session_id}")
     print("=" * 80)
 
     # 获取状态图
@@ -357,6 +436,9 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
         "recursion_limit": 50,
     }
 
+    cache_hit = False
+    cached_answer = ""
+
     # 使用 astream_events v2 版本
     async for event in graph.astream_events(
         input={"messages": [HumanMessage(content=user_question)]},
@@ -364,6 +446,13 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
         version="v2",
     ):
         kind = event["event"]
+
+        # 检测缓存命中事件
+        if kind == "on_chain_end" and event.get("name") == "cache_lookup":
+            data = event.get("data", {}).get("output", {})
+            if data.get("cache_hit"):
+                cache_hit = True
+                cached_answer = data.get("cached_answer", "")
 
         # 只处理 LLM 的流式输出
         if kind == "on_chat_model_stream":
@@ -373,7 +462,14 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
                 if content:
                     yield content
 
+    # 如果命中缓存，逐字符返回缓存内容（模拟流式输出）
+    if cache_hit and cached_answer:
+        print("  [缓存命中] 流式返回缓存内容")
+        for char in cached_answer:
+            yield char
+            await asyncio.sleep(0.01)  # 模拟打字效果
+
     print("=" * 80)
-    print("✅ 流式输出完成")
+    print("流式输出完成")
     print("=" * 80)
     print()
