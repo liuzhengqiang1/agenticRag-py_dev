@@ -37,21 +37,30 @@ from app.services.llm.query_rewriter import (
     need_query_rewrite_from_messages,
     rewrite_query_from_messages_async,
 )
+from app.services.llm.intent_classifier import classify_intent_async
 from app.services.agents.query_cache import QueryCache
 
 
 class AgenticRAGState(MessagesState):
     """
-    扩展的状态定义，支持查询重写和缓存
+    扩展的状态定义，支持查询重写、意图识别和缓存
 
     属性：
         messages: 对话消息列表（继承自 MessagesState）
         rewritten_query: 重写后的查询（用于优化检索）
+        intent_status: 意图状态（accept/reject/unclear）
+        intent_reason: 意图判断原因
+        should_use_cache: 是否应该使用缓存
+        rewrite_count: 查询重写次数（防止无限循环）
         cache_hit: 是否命中缓存
         cached_answer: 缓存的回答
     """
 
     rewritten_query: str = ""
+    intent_status: str = ""
+    intent_reason: str = ""
+    should_use_cache: bool = True
+    rewrite_count: int = 0
     cache_hit: bool = False
     cached_answer: str = ""
 
@@ -144,6 +153,7 @@ class AgenticRAGGraph:
 
         print("  LangGraph 状态机构建完成")
         print("  - 查询重写节点：优化用户查询")
+        print("  - 意图识别节点：业务护栏 + 缓存策略 + 意图验证")
         print("  - 缓存查询节点：语义相似度匹配")
         print("  - Agent 节点：决策工具调用")
         print("  - Tool 节点：执行具体任务")
@@ -215,14 +225,57 @@ class AgenticRAGGraph:
 
             user_question = last_message.content
 
+            # 获取当前重写次数
+            rewrite_count = state.get("rewrite_count", 0)
+
             # 判断是否需要重写
             if need_query_rewrite_from_messages(user_question, messages[:-1]):
                 rewritten = await rewrite_query_from_messages_async(
                     user_question, messages[:-1]
                 )
-                return {"rewritten_query": rewritten}
+                return {
+                    "rewritten_query": rewritten,
+                    "rewrite_count": rewrite_count + 1,
+                }
 
-            return {"rewritten_query": user_question}
+            return {
+                "rewritten_query": user_question,
+                "rewrite_count": rewrite_count + 1,
+            }
+
+        # 定义意图识别节点
+        async def intent_classification_node(state: AgenticRAGState):
+            """
+            意图识别节点：判断查询意图和业务范围
+
+            功能：
+            1. 业务护栏：拒绝超出能力范围的请求
+            2. 缓存策略：判断是否应该使用缓存
+            3. 意图验证：检测意图是否明确
+            """
+            rewritten_query = state.get("rewritten_query", "")
+            if not rewritten_query:
+                messages = state["messages"]
+                if messages and isinstance(messages[-1], HumanMessage):
+                    rewritten_query = messages[-1].content
+
+            if not rewritten_query:
+                return {
+                    "intent_status": "unclear",
+                    "intent_reason": "查询为空",
+                    "should_use_cache": False,
+                }
+
+            # 调用意图分类
+            status, reason, use_cache = await classify_intent_async(rewritten_query)
+
+            print(f"  [意图识别] 状态: {status}, 原因: {reason}, 使用缓存: {use_cache}")
+
+            return {
+                "intent_status": status,
+                "intent_reason": reason,
+                "should_use_cache": use_cache,
+            }
 
         # 定义缓存查询节点
         async def cache_lookup_node(state: AgenticRAGState):
@@ -230,7 +283,13 @@ class AgenticRAGGraph:
             缓存查询节点：查找相似问题的缓存回答
 
             如果命中缓存，直接返回缓存结果，跳过 LLM 调用
+            注意：只有 should_use_cache=True 时才会执行查询
             """
+            # 检查是否应该使用缓存
+            if not state.get("should_use_cache", True):
+                print("  [缓存策略] 跳过缓存查询")
+                return {"cache_hit": False, "cached_answer": ""}
+
             rewritten_query = state.get("rewritten_query", "")
             if not rewritten_query:
                 # 使用原始问题
@@ -301,6 +360,31 @@ class AgenticRAGGraph:
             return {}
 
         # 定义路由逻辑
+        def route_after_intent(
+            state: AgenticRAGState,
+        ) -> Literal["query_rewrite", "cache_lookup", END]:
+            """意图识别后的路由"""
+            intent_status = state.get("intent_status", "accept")
+            rewrite_count = state.get("rewrite_count", 0)
+
+            # 如果意图被拒绝，直接结束
+            if intent_status == "reject":
+                print(f"  [业务护栏] 拒绝查询: {state.get('intent_reason', '')}")
+                return END
+
+            # 如果意图不明确且重写次数未超限，重新改写
+            if intent_status == "unclear" and rewrite_count < 3:
+                print(f"  [意图验证] 意图不明确，重新改写（第 {rewrite_count} 次）")
+                return "query_rewrite"
+
+            # 如果重写次数超限，也结束流程
+            if intent_status == "unclear" and rewrite_count >= 3:
+                print("  [意图验证] 重写次数超限，终止流程")
+                return END
+
+            # 意图明确，继续处理
+            return "cache_lookup"
+
         def should_continue(
             state: AgenticRAGState,
         ) -> Literal["tools", "cache_write"]:
@@ -325,13 +409,15 @@ class AgenticRAGGraph:
         workflow = StateGraph(AgenticRAGState)
 
         workflow.add_node("query_rewrite", query_rewrite_node)
+        workflow.add_node("intent_classification", intent_classification_node)
         workflow.add_node("cache_lookup", cache_lookup_node)
         workflow.add_node("agent", agent_node)
         workflow.add_node("tools", ToolNode(instance._tools))
         workflow.add_node("cache_write", cache_write_node)
 
         workflow.add_edge(START, "query_rewrite")
-        workflow.add_edge("query_rewrite", "cache_lookup")
+        workflow.add_edge("query_rewrite", "intent_classification")
+        workflow.add_conditional_edges("intent_classification", route_after_intent)
         workflow.add_conditional_edges("cache_lookup", route_after_cache_lookup)
         workflow.add_conditional_edges("agent", should_continue)
         workflow.add_edge("tools", "agent")
@@ -402,6 +488,14 @@ def run_agentic_rag(user_question: str, session_id: str = "default") -> str:
     # 提取最终回答（优先使用缓存回答）
     if result.get("cache_hit"):
         final_answer = result.get("cached_answer", "")
+    elif result.get("intent_status") == "reject":
+        # 业务护栏：拒绝超出范围的请求
+        reason = result.get("intent_reason", "该请求不在支持范围内")
+        final_answer = f"抱歉，{reason}。\n\n我目前支持以下功能：\n- 知识库检索：回答基于已有文档的问题\n- 天气查询：查询指定城市的天气信息\n- 订单查询：查询用户的订单信息\n- 互联网搜索：搜索最新的互联网信息\n\n请问有什么我可以帮助您的吗？"
+    elif result.get("intent_status") == "unclear":
+        # 意图不明确
+        reason = result.get("intent_reason", "您的问题不够明确")
+        final_answer = f"抱歉，{reason}。能否提供更多信息或换个方式描述您的问题？"
     else:
         final_answer = result["messages"][-1].content
 
@@ -438,6 +532,8 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
 
     cache_hit = False
     cached_answer = ""
+    intent_status = ""
+    intent_reason = ""
 
     # 使用 astream_events v2 版本
     async for event in graph.astream_events(
@@ -446,6 +542,12 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
         version="v2",
     ):
         kind = event["event"]
+
+        # 检测意图识别结果
+        if kind == "on_chain_end" and event.get("name") == "intent_classification":
+            data = event.get("data", {}).get("output", {})
+            intent_status = data.get("intent_status", "")
+            intent_reason = data.get("intent_reason", "")
 
         # 检测缓存命中事件
         if kind == "on_chain_end" and event.get("name") == "cache_lookup":
@@ -461,6 +563,24 @@ async def run_agentic_rag_stream(user_question: str, session_id: str = "default"
                 content = chunk.content
                 if content:
                     yield content
+
+    # 如果意图被拒绝，返回提示信息
+    if intent_status == "reject":
+        reject_message = f"抱歉，{intent_reason}。\n\n我目前支持以下功能：\n- 知识库检索：回答基于已有文档的问题\n- 天气查询：查询指定城市的天气信息\n- 订单查询：查询用户的订单信息\n- 互联网搜索：搜索最新的互联网信息\n\n请问有什么我可以帮助您的吗？"
+        for char in reject_message:
+            yield char
+            await asyncio.sleep(0.01)
+        return
+
+    # 如果意图不明确，返回提示信息
+    if intent_status == "unclear":
+        unclear_message = (
+            f"抱歉，{intent_reason}。能否提供更多信息或换个方式描述您的问题？"
+        )
+        for char in unclear_message:
+            yield char
+            await asyncio.sleep(0.01)
+        return
 
     # 如果命中缓存，逐字符返回缓存内容（模拟流式输出）
     if cache_hit and cached_answer:
