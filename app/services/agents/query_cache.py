@@ -6,6 +6,7 @@ Query 缓存模块：基于 Redis Stack 向量检索的问题缓存
 - 使用 Redis Stack 的向量检索功能 (FT.SEARCH + KNN)
 - 缓存最终回答，避免重复调用 LLM
 - 支持 Redis Stack 向量存储，降级到内存存储
+- 否定词感知：避免"能/不能"等语义相近但意图相反的问题错误命中缓存
 
 【使用方式】
     # 初始化
@@ -21,12 +22,140 @@ Query 缓存模块：基于 Redis Stack 向量检索的问题缓存
 import json
 import time
 import hashlib
-from typing import Optional, Tuple, List
+import re
+from typing import Optional, Tuple, List, Set
 from cachetools import LRUCache
 
 from langchain_community.embeddings import DashScopeEmbeddings
 
 from app.core.redis_config import RedisConfig
+
+
+class NegationDetector:
+    """
+    否定词检测器
+
+    检测中文问题中的否定表达，用于语义缓存的硬性过滤。
+    解决 Embedding 模型对否定词不敏感的问题。
+    """
+
+    # 中文否定词列表（按否定强度分类）
+    # 强否定：完全否定
+    STRONG_NEGATIONS = {
+        "不",
+        "没",
+        "无",
+        "非",
+        "未",
+        "别",
+        "莫",
+        "勿",
+        "不能",
+        "不会",
+        "不要",
+        "没有",
+        "无法",
+        "不可",
+        "不行",
+        "不准",
+        "禁止",
+        "严禁",
+    }
+
+    # 弱否定：部分否定或疑问否定
+    WEAK_NEGATIONS = {
+        "是不是不",
+        "是不是没",
+        "难道不",
+        "难道没",
+        "为什么不",
+        "为什么没",
+        "怎么不",
+        "怎么没",
+    }
+
+    # 否定词模式（正则表达式）
+    NEGATION_PATTERNS = [
+        r"不[\u4e00-\u9fa5]{0,2}[吗呢吧啊]",  # 不...吗/呢/吧
+        r"没[\u4e00-\u9fa5]{0,2}[吗呢吧啊]",  # 没...吗/呢/吧
+        r"是不是不",  # 是不是不
+        r"有没有不",  # 有没有不
+    ]
+
+    @classmethod
+    def detect(cls, text: str) -> dict:
+        """
+        检测文本中的否定表达
+
+        参数:
+            text: 输入文本
+
+        返回:
+            {
+                "has_negation": bool,      # 是否包含否定
+                "negation_words": list,    # 检测到的否定词
+                "negation_count": int,     # 否定词数量
+                "negation_signature": str  # 否定签名（用于快速比较）
+            }
+        """
+        negation_words = []
+        negation_count = 0
+
+        # 1. 检测强否定词
+        for word in cls.STRONG_NEGATIONS:
+            if word in text:
+                negation_words.append(word)
+                negation_count += text.count(word)
+
+        # 2. 检测弱否定词
+        for word in cls.WEAK_NEGATIONS:
+            if word in text:
+                negation_words.append(word)
+                negation_count += 1
+
+        # 3. 检测否定模式
+        for pattern in cls.NEGATION_PATTERNS:
+            matches = re.findall(pattern, text)
+            if matches:
+                negation_words.extend(matches)
+
+        # 去重
+        negation_words = list(set(negation_words))
+
+        # 生成否定签名
+        if negation_words:
+            signature = hashlib.md5(
+                "|".join(sorted(negation_words)).encode()
+            ).hexdigest()[:8]
+        else:
+            signature = "POS"  # 无否定，正向
+
+        return {
+            "has_negation": len(negation_words) > 0,
+            "negation_words": negation_words,
+            "negation_count": negation_count,
+            "negation_signature": signature,
+        }
+
+    @classmethod
+    def is_compatible(cls, sig1: str, sig2: str) -> bool:
+        """
+        判断两个否定签名是否兼容（可以命中缓存）
+
+        规则：
+        - 相同签名：兼容
+        - 都是正向（POS）：兼容
+        - 一个正向一个负向：不兼容
+        - 不同负向签名：不兼容
+
+        参数:
+            sig1: 第一个签名
+            sig2: 第二个签名
+
+        返回:
+            是否兼容
+        """
+        return sig1 == sig2
 
 
 class QueryCache:
@@ -97,6 +226,7 @@ class QueryCache:
         print(f"  - 存储模式: {storage_type}")
         print(f"  - TTL: {cls.TTL_SECONDS // 3600}小时")
         print(f"  - 相似度阈值: {cls.SIMILARITY_THRESHOLD}")
+        print(f"  - 否定词感知: 已启用")
         print("=" * 60)
 
         return instance
@@ -133,6 +263,7 @@ class QueryCache:
         创建 Redis Stack 向量索引
 
         使用 HNSW 算法进行近似最近邻搜索
+        新增 negation_signature 字段用于否定词过滤
         """
         try:
             # 检查索引是否已存在
@@ -151,6 +282,7 @@ class QueryCache:
 
             # 创建索引
             # 使用 HNSW 算法，COSINE 相似度
+            # 新增 negation_signature 字段用于否定词过滤
             await self._redis_client.execute_command(
                 "FT.CREATE",
                 self.INDEX_NAME,
@@ -166,6 +298,8 @@ class QueryCache:
                 "TEXT",
                 "timestamp",
                 "NUMERIC",
+                "negation_signature",
+                "TAG",  # 使用 TAG 类型，精确匹配
                 "embedding",
                 "VECTOR",
                 "HNSW",
@@ -177,7 +311,7 @@ class QueryCache:
                 "DISTANCE_METRIC",
                 "COSINE",
             )
-            print("  - 向量索引创建成功 (HNSW, COSINE)")
+            print("  - 向量索引创建成功 (HNSW, COSINE, 否定词感知)")
 
         except Exception as e:
             # 索引可能已存在，忽略错误
@@ -198,21 +332,30 @@ class QueryCache:
         """
         instance = cls.get_instance()
 
-        # 1. 生成查询向量
+        # 1. 检测否定词
+        negation_info = NegationDetector.detect(query)
+        negation_signature = negation_info["negation_signature"]
+
+        # 2. 生成查询向量
         query_embedding = await instance._embeddings.aembed_query(query)
 
-        # 2. 查找最相似的问题
+        # 3. 查找最相似的问题
         if cls._using_redis:
-            result = await instance._search_redis_vector(query_embedding)
+            result = await instance._search_redis_vector(
+                query_embedding, negation_signature
+            )
         else:
-            result = instance._search_memory(query_embedding)
+            result = instance._search_memory(query_embedding, negation_signature)
 
-        # 3. 输出日志
+        # 4. 输出日志
         if result:
             answer, similarity = result
-            print(f"✓ 缓存命中 | 相似度: {similarity:.4f} | 问题: {query[:50]}...")
+            negation_status = "否定" if negation_info["has_negation"] else "正向"
+            print(
+                f"[缓存命中] 相似度: {similarity:.4f} | 否定状态: {negation_status} | 问题: {query[:50]}..."
+            )
         else:
-            print(f"✗ 缓存未命中 | 问题: {query[:50]}...")
+            print(f"[缓存未命中] 问题: {query[:50]}...")
 
         return result
 
@@ -227,27 +370,37 @@ class QueryCache:
         """
         instance = cls.get_instance()
 
-        # 1. 生成问题向量
+        # 1. 检测否定词
+        negation_info = NegationDetector.detect(query)
+        negation_signature = negation_info["negation_signature"]
+
+        # 2. 生成问题向量
         query_embedding = await instance._embeddings.aembed_query(query)
 
-        # 2. 写入存储
+        # 3. 写入存储
         if cls._using_redis:
-            await instance._set_redis_vector(query, answer, query_embedding)
+            await instance._set_redis_vector(
+                query, answer, query_embedding, negation_signature
+            )
         else:
-            instance._set_memory(query, answer, query_embedding)
+            instance._set_memory(query, answer, query_embedding, negation_signature)
 
-        # 3. 输出日志
+        # 4. 输出日志
         storage_type = "Redis" if cls._using_redis else "内存"
-        print(f"→ 缓存已写入 ({storage_type}) | 问题: {query[:50]}...")
+        negation_status = "否定" if negation_info["has_negation"] else "正向"
+        print(
+            f"[缓存写入] {storage_type} | 否定状态: {negation_status} | 问题: {query[:50]}..."
+        )
 
     async def _search_redis_vector(
-        self, query_embedding: List[float]
+        self, query_embedding: List[float], negation_signature: str
     ) -> Optional[Tuple[str, float]]:
         """
         使用 Redis Stack 向量检索搜索相似问题
 
         参数:
             query_embedding: 查询向量
+            negation_signature: 否定签名（用于硬性过滤）
 
         返回:
             (answer, similarity) 或 None
@@ -259,11 +412,11 @@ class QueryCache:
             query_vector = np.array(query_embedding, dtype=np.float32).tobytes()
 
             # 使用 KNN 搜索最相似的 1 个结果
-            # FT.SEARCH 使用 COSINE 距离，需要转换为相似度
+            # 增加 negation_signature 过滤条件
             results = await self._redis_client.execute_command(
                 "FT.SEARCH",
                 self.INDEX_NAME,
-                "*=>[KNN 1 @embedding $query_vector AS vector_score]",
+                f"@negation_signature:{{{negation_signature}}}=>[KNN 1 @embedding $query_vector AS vector_score]",
                 "PARAMS",
                 "2",
                 "query_vector",
@@ -324,9 +477,18 @@ class QueryCache:
             return None
 
     def _search_memory(
-        self, query_embedding: List[float]
+        self, query_embedding: List[float], negation_signature: str
     ) -> Optional[Tuple[str, float]]:
-        """在内存中搜索相似问题"""
+        """
+        在内存中搜索相似问题
+
+        参数:
+            query_embedding: 查询向量
+            negation_signature: 否定签名
+
+        返回:
+            (answer, similarity) 或 None
+        """
         if not self._cache_index:
             return None
 
@@ -335,7 +497,11 @@ class QueryCache:
         best_similarity = 0.0
         best_answer = None
 
-        for cached_embedding, answer in self._cache_index:
+        for cached_embedding, answer, cached_sig in self._cache_index:
+            # 否定签名必须匹配
+            if cached_sig != negation_signature:
+                continue
+
             similarity = self._cosine_similarity(query_embedding, cached_embedding)
 
             if similarity > best_similarity:
@@ -347,7 +513,9 @@ class QueryCache:
 
         return None
 
-    async def _set_redis_vector(self, query: str, answer: str, embedding: List[float]):
+    async def _set_redis_vector(
+        self, query: str, answer: str, embedding: List[float], negation_signature: str
+    ):
         """
         写入 Redis Stack 向量缓存
 
@@ -355,6 +523,7 @@ class QueryCache:
             query: 用户问题
             answer: 最终回答
             embedding: 问题向量
+            negation_signature: 否定签名
         """
         try:
             import numpy as np
@@ -367,6 +536,7 @@ class QueryCache:
 
             print(f"  [调试] 写入 key: {key}")
             print(f"  [调试] 向量维度: {len(embedding)}, 字节长度: {len(vector_bytes)}")
+            print(f"  [调试] 否定签名: {negation_signature}")
 
             # 写入 Redis Hash
             await self._redis_client.hset(
@@ -375,6 +545,7 @@ class QueryCache:
                     "query": query,
                     "answer": answer,
                     "timestamp": str(time.time()),
+                    "negation_signature": negation_signature,
                     "embedding": vector_bytes,
                 },
             )
@@ -392,8 +563,18 @@ class QueryCache:
 
             traceback.print_exc()
 
-    def _set_memory(self, query: str, answer: str, embedding: List[float]):
-        """写入内存缓存"""
+    def _set_memory(
+        self, query: str, answer: str, embedding: List[float], negation_signature: str
+    ):
+        """
+        写入内存缓存
+
+        参数:
+            query: 用户问题
+            answer: 最终回答
+            embedding: 问题向量
+            negation_signature: 否定签名
+        """
         key = hashlib.md5(query.encode()).hexdigest()
 
         # 写入 LRU 缓存
@@ -401,10 +582,11 @@ class QueryCache:
             "query": query,
             "answer": answer,
             "embedding": embedding,
+            "negation_signature": negation_signature,
         }
 
-        # 更新索引
-        self._cache_index.append((embedding, answer))
+        # 更新索引（包含否定签名）
+        self._cache_index.append((embedding, answer, negation_signature))
 
         # 限制索引大小
         if len(self._cache_index) > self.MAX_MEMORY_CACHE_SIZE:
