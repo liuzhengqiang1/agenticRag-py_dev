@@ -268,21 +268,64 @@ class QueryCache:
         try:
             # 检查索引是否已存在
             indices = await self._redis_client.execute_command("FT._LIST")
-            if self.INDEX_NAME.encode() in indices or self.INDEX_NAME in indices:
-                print("  - 向量索引已存在，跳过创建")
-                # 输出索引信息
+            index_exists = (
+                self.INDEX_NAME.encode() in indices or self.INDEX_NAME in indices
+            )
+
+            if index_exists:
+                # 检查索引是否包含 negation_signature 字段
                 try:
                     info = await self._redis_client.execute_command(
                         "FT.INFO", self.INDEX_NAME
                     )
-                    print(f"  - 索引信息: {info[:20]}...")  # 只显示前20项
+                    # info 是列表，需要解析查找字段名
+                    has_negation_field = False
+                    for i, item in enumerate(info):
+                        if item == "indexing" or (
+                            isinstance(item, bytes) and item.decode() == "indexing"
+                        ):
+                            break
+                        if item == "fields" or (
+                            isinstance(item, bytes) and item.decode() == "fields"
+                        ):
+                            # 下一个元素是字段列表
+                            fields_list = info[i + 1] if i + 1 < len(info) else []
+                            for field_info in fields_list:
+                                field_name = (
+                                    field_info[0]
+                                    if isinstance(field_info, list)
+                                    else field_info
+                                )
+                                if isinstance(field_name, bytes):
+                                    field_name = field_name.decode()
+                                if field_name == "negation_signature":
+                                    has_negation_field = True
+                                    break
+                            break
+
+                    if not has_negation_field:
+                        # 旧索引缺少字段，需要删除重建
+                        print("  - 旧索引缺少 negation_signature 字段，正在重建...")
+                        await self._redis_client.execute_command(
+                            "FT.DROPINDEX", self.INDEX_NAME
+                        )
+                        index_exists = False
+                    else:
+                        print("  - 向量索引已存在且包含否定词字段，跳过创建")
+                        return
                 except Exception as e:
-                    print(f"  - 获取索引信息失败: {e}")
-                return
+                    print(f"  - 检查索引字段失败: {e}，尝试重建索引")
+                    try:
+                        await self._redis_client.execute_command(
+                            "FT.DROPINDEX", self.INDEX_NAME
+                        )
+                        index_exists = False
+                    except:
+                        pass
 
             # 创建索引
             # 使用 HNSW 算法，COSINE 相似度
-            # 新增 negation_signature 字段用于否定词过滤
+            # negation_signature 使用 TAG 类型，精确匹配
             await self._redis_client.execute_command(
                 "FT.CREATE",
                 self.INDEX_NAME,
@@ -299,7 +342,7 @@ class QueryCache:
                 "timestamp",
                 "NUMERIC",
                 "negation_signature",
-                "TAG",  # 使用 TAG 类型，精确匹配
+                "TAG",
                 "embedding",
                 "VECTOR",
                 "HNSW",
@@ -314,7 +357,6 @@ class QueryCache:
             print("  - 向量索引创建成功 (HNSW, COSINE, 否定词感知)")
 
         except Exception as e:
-            # 索引可能已存在，忽略错误
             if "Index already exists" not in str(e):
                 print(f"  - 创建向量索引失败: {e}")
 
@@ -412,11 +454,17 @@ class QueryCache:
             query_vector = np.array(query_embedding, dtype=np.float32).tobytes()
 
             # 使用 KNN 搜索最相似的 1 个结果
-            # 增加 negation_signature 过滤条件
+            # TAG 字段查询语法: @field:{value}
+            # 注意: TAG 字段值需要精确匹配，不区分大小写
+            query_str = f"@negation_signature:{{{negation_signature}}}=>[KNN 1 @embedding $query_vector AS vector_score]"
+
+            print(f"  [调试] 查询语句: {query_str}")
+            print(f"  [调试] 否定签名: {negation_signature}")
+
             results = await self._redis_client.execute_command(
                 "FT.SEARCH",
                 self.INDEX_NAME,
-                f"@negation_signature:{{{negation_signature}}}=>[KNN 1 @embedding $query_vector AS vector_score]",
+                query_str,
                 "PARAMS",
                 "2",
                 "query_vector",
