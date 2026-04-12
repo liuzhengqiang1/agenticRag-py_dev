@@ -5,6 +5,7 @@
 from langchain_core.tools import tool
 from app.services.retrievers.ensemble_retriever import create_hybrid_retriever
 from app.services.utils.formatters import format_docs
+from app.services.tools.tool_wrapper import safe_tool
 
 
 # ============================================================
@@ -17,13 +18,14 @@ def _get_retriever():
     """获取检索器单例"""
     global _retriever
     if _retriever is None:
-        print("🔧 [RAG Tool] 初始化检索器...")
+        print("[RAG Tool] 初始化检索器...")
         _retriever = create_hybrid_retriever()
-        print("✓ [RAG Tool] 检索器初始化完成")
+        print("[RAG Tool] 检索器初始化完成")
     return _retriever
 
 
 @tool
+@safe_tool
 def search_knowledge_base(query: str) -> str:
     """
     在企业知识库中检索相关信息（培训制度、报销流程等内部文档）。
@@ -39,22 +41,16 @@ def search_knowledge_base(query: str) -> str:
     返回:
         知识库中检索到的相关内容
     """
-    print(f"🔍 [RAG Tool] 检索查询：{query}")
+    print(f"[RAG Tool] 检索查询：{query}")
 
-    try:
-        # 使用单例检索器
-        retriever = _get_retriever()
-        docs = retriever.invoke(query)
+    # 使用单例检索器
+    retriever = _get_retriever()
+    docs = retriever.invoke(query)
 
-        if not docs:
-            return "知识库中未找到相关信息。"
+    if not docs:
+        return "知识库中未找到相关信息。"
 
-        # 格式化结果
-        result = format_docs(docs)
-        print(f"✓ 检索到 {len(docs)} 条相关文档")
-        return result
-
-    except Exception as e:
-        error_msg = f"知识库检索失败：{str(e)}"
-        print(f"❌ {error_msg}")
-        return error_msg
+    # 格式化结果
+    result = format_docs(docs)
+    print(f"[RAG Tool] 检索到 {len(docs)} 条相关文档")
+    return result

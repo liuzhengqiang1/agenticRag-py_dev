@@ -3,9 +3,11 @@
 """
 
 from langchain_core.tools import tool
+from app.services.tools.tool_wrapper import safe_tool
 
 
 @tool
+@safe_tool
 def query_database_order(order_id: str) -> str:
     """
     查询订单的当前状态。
@@ -17,5 +19,5 @@ def query_database_order(order_id: str) -> str:
         订单状态信息
     """
     # 模拟调用订单服务
-    print(f"📦 [Order Tool] query_database_order(order_id='{order_id}')")
+    print(f"[Order Tool] query_database_order(order_id='{order_id}')")
     return f"订单 {order_id} 正在配送中，预计明天下午送达"

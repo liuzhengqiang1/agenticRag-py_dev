@@ -3,9 +3,11 @@
 """
 
 from langchain_core.tools import tool
+from app.services.tools.tool_wrapper import safe_tool
 
 
 @tool
+@safe_tool
 def get_current_weather(city: str) -> str:
     """
     获取指定城市的当前天气信息。
@@ -24,5 +26,5 @@ def get_current_weather(city: str) -> str:
     }
 
     result = weather_data.get(city, f"{city}的天气数据暂时无法获取")
-    print(f"🌤️  [Weather Tool] get_current_weather(city='{city}') -> {result}")
+    print(f"[Weather Tool] get_current_weather(city='{city}') -> {result}")
     return result
